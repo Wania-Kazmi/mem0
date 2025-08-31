@@ -32,7 +32,7 @@ mem0 = MemoryClient()
 def add_memory(query: str, user_id: str) -> str:
     """Add a new memory for the user"""
     try:
-        result = mem0.add([{"role": "user", "content": query}], user_id=user_id)
+        result = mem0.add([{"role": "user", "content": query}], user_id=user_id, version="v2", output_format="v1.1")
         return f"Memory added: {result}"
     except Exception as e:
         return f"Error adding memory: {str(e)}"
@@ -42,7 +42,15 @@ def add_memory(query: str, user_id: str) -> str:
 def search_memory(query: str, user_id: str) -> str:
     """Search through past conversations and memories"""
     try:
-       memories = mem0.search(query, user_id=user_id, limit=3)
+       # Mem0 v2 API requires non-empty filters
+       memories = mem0.search(
+           query, 
+           user_id=user_id, 
+           limit=3, 
+           version="v2", 
+           output_format="v1.1",
+           filters={"user_id": user_id}  # Use user_id as a filter
+       )
        
        if memories and isinstance(memories, list) and len(memories) > 0:
             return "\n".join([f"- {mem['memory']}" for mem in memories])
@@ -58,19 +66,19 @@ agent = Agent(
     instructions=f"""You are a helpful personal assistant with memory capabilities.
 
     Use the **search_memory** tool to recall past conversations and user preferences.
-
     Use the **add_memory** tool to store information about the user.
     
-    IMPORTANT: Before answering any question, ALWAYS use the search_memory tool first to check if you have relevant information stored about the user. 
-    Make sure user_id is properly passed to tools.
+    IMPORTANT: 
+    - Before answering any question, ALWAYS use the search_memory tool first to check if you have relevant information stored about the user.
+    - Make sure user_id is properly passed to tools.
+    - When the user provides new information about themselves, use add_memory to store it.
+    - When the user asks about personal information (like their name, preferences, etc.), use search_memory to find the answer.
+    - Always save user conversation history for better understanding and personalize your responses based on available memory.
     
-    When the user provides new information about themselves, use add_memory to store it.
-
-    When the user asks about personal information (like their name, preferences, etc.), use search_memory to find the answer.
-
-    Always save user conversation history for better understanding and personalize your responses based on available memory.""",
+    The user_id should be extracted from the user's message. Look for patterns like `user_id` or extract it from the context.
+    If no user_id is found, use "default_user" as a fallback.""",
     tools=[search_memory, add_memory],
-    model="gpt-4o"
+    model=llm_model,
 )
 
 async def chat_with_agent(user_input: str) -> str:
@@ -87,14 +95,14 @@ if __name__ == "__main__":
     
     # preferences will be saved in memory (using save_memory tool)
     response_1 = asyncio.run(chat_with_agent(
-        "My name is hamza and I like programming and my favourite dish is biryani {hamza_123} ",
+        "My name is wania and I like programming and my favourite dish is biryani `wania_123` ",
     ))
     print(response_1)
     print("=================================")
 
     # memory will be retrieved using search_memory tool to answer the user query
     response_2 = asyncio.run(chat_with_agent(
-        "What is my name and what I like to do and user_id is {hamza_123}?",
+        "What is my name and what I like to do and user_id is `wania_123`?",
     ))
     print(response_2)
     print("=================================")
